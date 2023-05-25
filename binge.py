@@ -136,23 +136,27 @@ def Pump_event_calculate(csv_path):
     return P1_time, P1C_time, P2_time, P2A_time, pump_all
 
 def add_missing_licks(Pump_all_no_init,L1_timestamps):
+    L1_timestamps = np.concatenate([np.zeros(1),L1_timestamps]) ## add a 0 at the beginning, so we don't need a conditional statement
 
     # diff_concat = []
     for pump_event in Pump_all_no_init:
         # print(pump_event)
-        if (L1_timestamps<pump_event).all() ==0:
-           diff_ = 100 # set to a large value that passes the criteria
-        else:
-          nearest_event = find_nearest(L1_timestamps[L1_timestamps<pump_event], pump_event) # only check the licks preceding the pump event
-          diff_ = pump_event - nearest_event
+        # if (L1_timestamps<pump_event).all() ==0:
+        #    diff_ = 100 # set to a large value that passes the criteria
+        # else:
+        nearest_event = find_nearest(L1_timestamps[L1_timestamps<pump_event], pump_event) # only check the licks preceding the pump event
+        # print(nearest_event,pump_event)
+        diff_ = pump_event - nearest_event
         # print(diff_)
         # diff_concat.append(diff_)
         # if diff_<0: # means the nearest lick is after pump activation
         #     L1_timestamps = np.append(L1_timestamps,pump_event-0.02) ## mimicking the missing lick events
         if diff_>0.03: # measn neatest lick is way before pump activation
+            # print('yes')
             L1_timestamps = np.append(L1_timestamps,pump_event-0.02) ## mimicking the missing lick events
-
-    L1_timestamps = np.array(sorted(L1_timestamps))
+        # else:
+        #    print('lick event is presented, skip')
+    L1_timestamps = np.array(sorted(L1_timestamps)[1:]) # remove the first 0
     return L1_timestamps
 
 def detect_feeding_bout(Pump1,interval=3):
@@ -297,11 +301,14 @@ def load_phenosys_nofilter(file_path):
     # plt.eventplot(P1)
     return L1,P1,P2,PAll
 
-def pheno_eventplot(P1,P2,PAll,P1_,P2_,PAll_,L1,mouse_id,date):   
+def pheno_eventplot(P1,P2,PAll,P1_,P2_,PAll_,L1,mouse_id,date,time_difference):   
     L1 = nap.Ts(L1)
     lick_max = np.max(L1.count(1).values)
     # print(lick_max)
-    x_shift = PAll_[-1]
+    if len(PAll_) == 0:
+      x_shift = 1550
+    else:
+      x_shift = PAll_[-1]
     if x_shift< 1550:
        x_shift = 1550 # force output to be 8 panels for consistency
     x_bar = [x*180+300 for x in range(18)]
@@ -316,6 +323,7 @@ def pheno_eventplot(P1,P2,PAll,P1_,P2_,PAll_,L1,mouse_id,date):
       ax.text(x=x,y=5,s=lick_max,ha='left',va='top')
       ax.plot(L1.count(1).index,(L1.count(1).values)/lick_max+4,alpha=0.75,c='grey')
       ax.eventplot([P1,P2,P1_,P2_],linewidths=1,colors=['C0','C0','C1','C1'],linelengths=0.8)
+      ax.plot([P1[0],P1[0]-time_difference],[2,2],lw=2)
       ax.set_xlim([x-10,x+130])
       ax.set_ylim([-1,5])
       sns.despine(ax=ax)
@@ -509,7 +517,7 @@ def remove_isx_GPIO_init(Pump1,Pump2):
   Pump1 = np.array(Pump1)
   Pump2 = np.array(Pump2)
   for x in x_bar:
-    if find_nearest(pump_all[pump_all>x],x)-x>30: # this means there is no initial pulse within 3 sec at the round starting time
+    if find_nearest(pump_all[pump_all>x],x)-x>25: # this means there is no initial pulse within 3 sec at the round starting time
        pass
     else:
       if len(Pump2[Pump2>x]) == 0: ## prevent the 2nd pump is empty
@@ -679,15 +687,15 @@ def extract_GPIO_trace(df_GPIO,plot=False):
     gpio_pump_time_all = {}
     for channel in GPIO_channel_list:
         gpio_value = df_GPIO.loc[df_GPIO[' Channel Name'] == channel][' Value'].astype(float)
-        print(channel)
+        # print(channel)
         ## check if there is signal at all
         if gpio_value.max()/(gpio_value.min()+1e-8) > 2: # prevent min is 0
             gpio_norm = (gpio_value-gpio_value.min())/(gpio_value.max()-gpio_value.min())
             gpio_timestamps = np.concatenate([np.zeros(1),gpio_norm[gpio_norm<0.5].index],axis=0)
             gpio_time_diff = np.diff(gpio_timestamps)
-            gpio_pump_time = gpio_timestamps[1:][gpio_time_diff>0.4]
+            gpio_pump_time = gpio_timestamps[1:][gpio_time_diff>0.04]
             gpio_pump_time_all[channel] = gpio_pump_time
-            print(f'First pump time: {gpio_pump_time_all[channel][0]}')
+            # print(f'First pump time: {gpio_pump_time_all[channel][0]}')
 
             if plot:
                 plt.figure(figsize=[10,2])
@@ -699,12 +707,13 @@ def extract_GPIO_trace(df_GPIO,plot=False):
                 plt.ylim([-1,1])
                 sns.despine()
                 plt.tight_layout()
-                # plt.xlim([310,315])
+                plt.xlim([320,340])
                 # plt.xlim([410,420])
                 plt.show()
         else:
-            print(f'No inputs in{channel} channel, skipped\n')
+            # print(f'No inputs in{channel} channel, skipped\n')
             # print(channel)
+            pass
     ## Check if GPIO signals are missing, if so add an empty np array to the corresponding channel:
     # print(f'chan #{len(gpio_pump_time_all.keys())}')
     if len(gpio_pump_time_all.keys())==1:
@@ -735,16 +744,38 @@ def extract_GPIO_trace(df_GPIO,plot=False):
     return GPIO_pump1_clean, GPIO_pump2_clean, GPIO_pump_all_no_init
 
 def compare_pheno_inscopix_gpio(PAll,GPIO_pump_all_no_init):
-    if len(PAll) ==0:
-        print('no drinking events')
+    if len(PAll) <2:
+        print('no enough drinking events')
         time_difference = 0
     else:
         pheno_min = np.min(PAll)
         GPIO_min  = np.min(GPIO_pump_all_no_init)
         time_difference = pheno_min-GPIO_min
-        print(pheno_min,GPIO_min)
-        print(f'pheno:{pheno_min}\nisx_GPIO:{GPIO_min}\ntime difference: {time_difference:.2f}')
+        # print(pheno_min,GPIO_min)
+        # print(f'pheno:{pheno_min}\nisx_GPIO:{GPIO_min}\ntime difference: {time_difference:.5f}')
     return time_difference
+
+def get_time_difference(PAll,GPIO_pump_all_no_init,windowsize=100):
+    if len(PAll) <2:
+      print('no enough drinking events')
+      time_difference = 0
+    else:
+      ts1 = nap.Ts(np.array(PAll))
+      ts2 = nap.Ts(np.array(GPIO_pump_all_no_init))
+      ts1_time_array = ts1.index.values
+      ts2_time_array = ts2.index.values
+
+      binsize=0.001
+      cc12, xt = nap.cross_correlogram(t1=ts1_time_array,t2=ts2_time_array,binsize=binsize,windowsize=windowsize)
+
+      idx_max = np.argmax(cc12)
+      print(f'time difference: {-xt[idx_max]}')
+      time_difference = -xt[idx_max]
+      # plt.figure()
+      # plt.bar(xt, cc12, binsize)
+      # plt.xlabel("Time t1 (s)")
+      # plt.ylabel("CC")
+    return time_difference # set to negative
 
 def loadandsync_incopix_csv(file_path):
     """
@@ -756,13 +787,18 @@ def loadandsync_incopix_csv(file_path):
     _,_,_,PAll = load_phenosys(file_path)    
     df_GPIO = load_GPIO_csv(file_path)
     _,_, GPIO_pump_all_no_init = extract_GPIO_trace(df_GPIO)
-    time_difference = compare_pheno_inscopix_gpio(PAll,GPIO_pump_all_no_init)
+    # time_difference = compare_pheno_inscopix_gpio(PAll,GPIO_pump_all_no_init)
+    time_difference = get_time_difference(PAll,GPIO_pump_all_no_init)
+    if abs(round(time_difference,0)) == 100:
+      ## getting boundary cases, might due to too few events or too large window
+      ## re-perform get time difference with small time window
+      time_difference = get_time_difference(PAll,GPIO_pump_all_no_init,windowsize=20)
     df_accepted = findandload_match_isx_csv(file_path, time_difference)
     print(f'==================\nnum of neurons: {df_accepted.shape[1]}')
 
     from scipy import stats
     df_z = df_accepted.apply(stats.zscore,axis=0)
-    return df_accepted, df_z
+    return df_accepted, df_z, time_difference
 
 
 

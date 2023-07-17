@@ -598,6 +598,7 @@ def find_match_isx_GPIO_csv(file_path,GPIO_folder=None):
     date_nodot = date.replace(".", "")
     if GPIO_folder == None:
       GPIO_folder = '/Users/hunglo/Documents/inscopix_csv/Ca2_csv/'
+    # print(GPIO_folder)
     subfolders = sorted([x[0] for x in os.walk(GPIO_folder)])
     subfolders = [f for f in subfolders if mouse_id in f][0]
     # print(subfolders)
@@ -651,16 +652,16 @@ def findandload_match_isx_csv(file_path, time_difference, isx_folder = None):
         df_all = pd.read_csv(os.path.join(subfolders,result[0]),header=[0,1],index_col=0)
         # Selecet only the accepted cells
         df_accepted = df_all.xs(' accepted',level='Time(s)/Cell Status',axis=1)
-        # if mouse_id in sero_matches or mouse_id in dopa_matches:
-        #     df_accepted = df_accepted[15:] # drop first 15 seconds
-        #     df_accepted = correct_baseline_modploy(df_accepted) # correct for baseline drift
-        ## skip this for now, then check if we can also use it for Ca2+ data in general
+        if 'SNA' in mouse_id:
+          df_accepted = df_accepted[15:] # drop first 15 seconds
+          df_accepted = correct_baseline_modploy(df_accepted) # correct for baseline drift
+
     df_accepted.index = df_accepted.index+time_difference
     if time_difference>0:
       print('!!!!!!!!!!!!!!!!!!!!!!!!!!')
       print(f'time diff is positive (should be negative)!!!!!!!!!!!!!!!!!!!!!!\ncheck again manually:\n{mouse_id}-{date}')
       print('!!!!!!!!!!!!!!!!!!!!!!!!!!')
-      if mouse_id == 'DSC012972':
+      if mouse_id in ['DSC012972','SNA089408']:
          pass # one recording actually is positive, but the values are all correct so skip
       else:
         sys.exit()
@@ -756,6 +757,9 @@ def compare_pheno_inscopix_gpio(PAll,GPIO_pump_all_no_init):
     return time_difference
 
 def get_time_difference(PAll,GPIO_pump_all_no_init,windowsize=100):
+    """
+    This is the current one I used now, use the pynapple cross-correlogram funciton, I can get the time difference without fully matching the timestamps
+    """
     if len(PAll) <2:
       print('no enough drinking events')
       time_difference = 0
@@ -765,19 +769,22 @@ def get_time_difference(PAll,GPIO_pump_all_no_init,windowsize=100):
       ts1_time_array = ts1.index.values
       ts2_time_array = ts2.index.values
 
+      # if date =='21.09.10':
+      #    windowsize = 5
+
       binsize=0.001
       cc12, xt = nap.cross_correlogram(t1=ts1_time_array,t2=ts2_time_array,binsize=binsize,windowsize=windowsize)
 
       idx_max = np.argmax(cc12)
       print(f'time difference: {-xt[idx_max]}')
-      time_difference = -xt[idx_max]
+      time_difference = -xt[idx_max] # set to negative
       # plt.figure()
       # plt.bar(xt, cc12, binsize)
       # plt.xlabel("Time t1 (s)")
       # plt.ylabel("CC")
-    return time_difference # set to negative
+    return time_difference 
 
-def loadandsync_incopix_csv(file_path):
+def loadandsync_incopix_csv(file_path,mouse_id):
     """
     Note here we use the phenosys csv file as the file_path, 
     and we should be able to directly load and sync corresponding Ca2+ csv files
@@ -793,6 +800,11 @@ def loadandsync_incopix_csv(file_path):
       ## getting boundary cases, might due to too few events or too large window
       ## re-perform get time difference with small time window
       time_difference = get_time_difference(PAll,GPIO_pump_all_no_init,windowsize=20)
+    elif '21.09.10' in file_path: # SNA089408 has some issues with x-corr, multiple max corr values, used a old function here
+       print('unstable x-corr, used old time difference function')
+       time_difference = compare_pheno_inscopix_gpio(PAll,GPIO_pump_all_no_init) # used the old one 
+       print(f'time difference (corrected): {time_difference}')
+
     df_accepted = findandload_match_isx_csv(file_path, time_difference)
     print(f'==================\nnum of neurons: {df_accepted.shape[1]}')
 
@@ -800,7 +812,13 @@ def loadandsync_incopix_csv(file_path):
     df_z = df_accepted.apply(stats.zscore,axis=0)
     return df_accepted, df_z, time_difference
 
-
+def correct_baseline_modploy(df_accepted):
+    input_array = df_accepted.values
+    polynomial_degree=2 #only needed for Modpoly and IModPoly algorithm
+    baseObj=BaselineRemoval(input_array)
+    Modpoly_output=baseObj.ModPoly(polynomial_degree)
+    df_corrected = pd.DataFrame(data=Modpoly_output,index=df_accepted.index,columns=[' C1'])
+    return df_corrected
 
 def altspace(start, step, count, endpoint=False, **kwargs):
    stop = start+(step*count)

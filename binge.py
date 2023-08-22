@@ -701,14 +701,14 @@ def extract_GPIO_trace(df_GPIO,plot=False):
             if plot:
                 plt.figure(figsize=[10,2])
                 plt.title(channel)
-                plt.eventplot(gpio_pump_time_all[channel],colors='C1',lineoffsets=-0.5,linewidths=0.5,label='pump activate timestamp')
-                plt.plot(gpio_norm,lw=0.5,label='raw normalized')
-                plt.legend(loc=4)
+                plt.eventplot(gpio_pump_time_all[channel],colors='C1',lineoffsets=-0.5,linewidths=1,label='pump activate timestamp')
+                plt.plot(gpio_norm,lw=1,label='raw normalized')
+                plt.legend()
                 plt.yticks([])
                 plt.ylim([-1,1])
                 sns.despine()
                 plt.tight_layout()
-                plt.xlim([320,340])
+                plt.xlim([300,350])
                 # plt.xlim([410,420])
                 plt.show()
         else:

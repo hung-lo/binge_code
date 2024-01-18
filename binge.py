@@ -60,34 +60,48 @@ def lick_event_calculate(csv_path):
     # Get L1 timestamps and MsgValue1
     L1_time = df[df['unitLabel']=='L1']['DateTime'].values
     L1_value = df[df['unitLabel']=='L1']['MsgValue1'].values
-
     L1_timestamps_new = []
+
+    # loop through each L1 value, if it has more than 1 value meaning more licks are packed here
     for idx,value in enumerate(L1_value):
+        # check if >1 licks are packed in this row
         if len(value.split(','))>1:
-            for j in value.split(',')[1:]:
-                individual_value = int(j.split('-')[0])*0.001 # convert ms to s
-                if idx == 0:
-                    L1_timestamps_new.append(L1_time[idx]+individual_value)
+            # loop through individual licks packed in this row
+            for idx_j,j in enumerate(value.split(',')):
+                if idx_j == 0:
+                    # get time from L1_time[idx] directly since this is the first lick
+                    L1_timestamps_new.append(L1_time[idx])
                 else:
+                    # get the first value of the lick events, meaning the time difference since the last lick "onset", note it's not the gap between these 2 lick events
+                    individual_value = int(j.split('-')[0])*0.001 # convert ms to s
+                    # add the time difference (individual_value) to the last timestamp in the array (last lick timestamp)
                     L1_timestamps_new.append(L1_timestamps_new[-1]+individual_value)
         else:
+            # only 1 lick event in this row, directly save the timestamp
             L1_timestamps_new.append(L1_time[idx])
     L1_timestamps_new = np.array(L1_timestamps_new)
 
     ## The same for L2
     L2_time = df[df['unitLabel']=='L2']['DateTime'].values
     L2_value = df[df['unitLabel']=='L2']['MsgValue1'].values
-
     L2_timestamps_new = []
+    
+    # loop through each L1 value, if it has more than 1 value meaning more licks are packed here
     for idx,value in enumerate(L2_value):
+        # check if >1 licks are packed in this row
         if len(value.split(','))>1:
-            for j in value.split(',')[1:]:
-                individual_value = int(j.split('-')[0])*0.001
-                if idx == 0:
-                    L2_timestamps_new.append(L2_time[idx]+individual_value)
+            # loop through individual licks packed in this row
+            for idx_j,j in enumerate(value.split(',')):
+                if idx_j == 0:
+                    # get time from L1_time[idx] directly since this is the first lick
+                    L2_timestamps_new.append(L2_time[idx])
                 else:
+                    # get the first value of the lick events, meaning the time difference since the last lick "onset", note it's not the gap between these 2 lick events
+                    individual_value = int(j.split('-')[0])*0.001 # convert ms to s
+                    # add the time difference (individual_value) to the last timestamp in the array (last lick timestamp)
                     L2_timestamps_new.append(L2_timestamps_new[-1]+individual_value)
         else:
+            # only 1 lick event in this row, directly save the timestamp
             L2_timestamps_new.append(L2_time[idx])
     L2_timestamps_new = np.array(L2_timestamps_new)
 

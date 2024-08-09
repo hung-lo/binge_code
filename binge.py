@@ -770,8 +770,37 @@ def compare_pheno_inscopix_gpio(PAll,GPIO_pump_all_no_init):
         # print(f'pheno:{pheno_min}\nisx_GPIO:{GPIO_min}\ntime difference: {time_difference:.5f}')
     return time_difference
 
+# def get_time_difference(PAll,GPIO_pump_all_no_init,windowsize=100):
+#     """
+#     This is the current one I used now, use the pynapple cross-correlogram funciton, I can get the time difference without fully matching the timestamps
+#     """
+#     if len(PAll) <2:
+#       print('no enough drinking events')
+#       time_difference = 0
+#     else:
+#       ts1 = nap.Ts(np.array(PAll))
+#       ts2 = nap.Ts(np.array(GPIO_pump_all_no_init))
+#       ts1_time_array = ts1.index.values
+#       ts2_time_array = ts2.index.values
+
+#       # if date =='21.09.10':
+#       #    windowsize = 5
+
+#       binsize=0.001
+#       cc12, xt = nap.cross_correlogram(t1=ts1_time_array,t2=ts2_time_array,binsize=binsize,windowsize=windowsize)
+
+#       idx_max = np.argmax(cc12)
+#       print(f'time difference: {-xt[idx_max]}')
+#       time_difference = -xt[idx_max] # set to negative
+#       # plt.figure()
+#       # plt.bar(xt, cc12, binsize)
+#       # plt.xlabel("Time t1 (s)")
+#       # plt.ylabel("CC")
+#     return time_difference 
+
 def get_time_difference(PAll,GPIO_pump_all_no_init,windowsize=100):
     """
+    Note: new version of pynapple changed how crosscorrelogram works, this is the adapted version of code that works now.
     This is the current one I used now, use the pynapple cross-correlogram funciton, I can get the time difference without fully matching the timestamps
     """
     if len(PAll) <2:
@@ -780,22 +809,14 @@ def get_time_difference(PAll,GPIO_pump_all_no_init,windowsize=100):
     else:
       ts1 = nap.Ts(np.array(PAll))
       ts2 = nap.Ts(np.array(GPIO_pump_all_no_init))
-      ts1_time_array = ts1.index.values
-      ts2_time_array = ts2.index.values
-
-      # if date =='21.09.10':
-      #    windowsize = 5
-
       binsize=0.001
-      cc12, xt = nap.cross_correlogram(t1=ts1_time_array,t2=ts2_time_array,binsize=binsize,windowsize=windowsize)
+      tsgroup = nap.TsGroup({0:ts1,1:ts2})
+      cross_corr = nap.compute_crosscorrelogram(tsgroup,binsize=binsize,windowsize=windowsize)
+      lag = cross_corr.idxmax().values # the index of max value
 
-      idx_max = np.argmax(cc12)
-      print(f'time difference: {-xt[idx_max]}')
-      time_difference = -xt[idx_max] # set to negative
-      # plt.figure()
-      # plt.bar(xt, cc12, binsize)
-      # plt.xlabel("Time t1 (s)")
-      # plt.ylabel("CC")
+      print(f'time difference: {lag[0]}')
+      time_difference = -lag[0] # set to negative
+
     return time_difference 
 
 def loadandsync_incopix_csv(file_path,mouse_id):
